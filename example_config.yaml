@@ -1,0 +1,12 @@
+logLevel: debug # sets log level only debug and info is supported
+
+http:
+  port: 2112 # tcp port the service will serve the metrics at
+
+mqtt:
+  broker: tcp://broker.com:1883 # adress of the mqtt broker
+  username: user
+  password: password
+
+scraping: # list of MQTT topic to expose as prometheus metrics
+  - topic/to/scrape # will be exposed as "topic_to_scrape" gauge metric
