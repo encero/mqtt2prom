@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -13,84 +12,73 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
 )
 
 func main() {
-	cfgData, err := os.ReadFile("config.yaml")
-	if err != nil {
-		fmt.Println("cant read config: ", err.Error())
-		os.Exit(1)
-	}
+	zapConfig := zap.NewDevelopmentConfig()
+    logger, _ := zapConfig.Build()
 
-	cfg := config{}
+    cfg, err := readConfig("config.yaml")
+    if err != nil {
+        logger.Fatal("Can't read config", zap.Error(err))
+    }
 
-	err = yaml.Unmarshal(cfgData, &cfg)
-	if err != nil {
-		fmt.Println("cant decode config:", err.Error())
-		os.Exit(1)
-	}
-
-	logger, _ := zap.NewDevelopmentConfig().Build()
+    if cfg.LogLevel != "debug" {
+        zapConfig.Level.SetLevel(zap.InfoLevel)
+    }
 
 	err = run(cfg, logger)
 	if err != nil {
-		logger.Error("Application failed", zap.Error(err))
-		os.Exit(1)
+		logger.Fatal("Application failed", zap.Error(err))
 	}
-}
-
-type mqttConfig struct {
-	Password string `yaml:"password"`
-	UserName string `yaml:"username"`
-	Broker   string `yaml:"broker"`
-}
-
-type scrapingConfig struct {
-	Simple []string `yaml:"simple"`
-}
-
-type config struct {
-	MQTT     mqttConfig     `yaml:"mqtt"`
-	Scraping scrapingConfig `yaml:"scraping"`
 }
 
 func run(cfg config, logger *zap.Logger) error {
-	mqttOpts := mqtt.NewClientOptions()
-
-	mqttOpts.Password = cfg.MQTT.Password
-	mqttOpts.Username = cfg.MQTT.UserName
-
-	mqttOpts.AddBroker(cfg.MQTT.Broker)
-
-	mq := mqtt.NewClient(mqttOpts)
-
-	token := mq.Connect()
-	if !token.WaitTimeout(time.Second) {
-		logger.Error("Can't connect to mqtt broker")
-	}
-
-	defer mq.Disconnect(1000)
+    mq, err := connectMqtt(cfg.MQTT)
+    if err != nil {
+        return err
+    }
+    defer mq.Disconnect(uint(time.Second.Milliseconds()))
 
 	logger.Info("Connected to mqtt broker")
 
 	metrics := prometheus.NewRegistry()
 
-	err := registerGauges(cfg.Scraping.Simple, mq, metrics, logger)
+	err = registerGauges(cfg.Scraping.Simple, mq, metrics, logger)
 	if err != nil {
 		return err
 	}
 
-	logger.Info("Starting metrics server")
-
 	http.Handle("/metrics", promhttp.HandlerFor(metrics, promhttp.HandlerOpts{}))
 
-	err = http.ListenAndServe(":2112", nil)
+    addr := fmt.Sprintf("127.0.0.1:%s", cfg.Http.Port)
+
+	logger.Info("Starting metrics server", zap.String("address", addr))
+    
+	err = http.ListenAndServe(addr, nil)
 	if err != nil {
 		return fmt.Errorf("ListenAndServe error: %w", err)
 	}
 
 	return nil
+}
+
+func connectMqtt(cfg mqttConfig) (mqtt.Client, error) {
+	mqttOpts := mqtt.NewClientOptions()
+
+	mqttOpts.Password = cfg.Password
+	mqttOpts.Username = cfg.UserName
+
+	mqttOpts.AddBroker(cfg.Broker)
+
+	mq := mqtt.NewClient(mqttOpts)
+
+	token := mq.Connect()
+	if !token.WaitTimeout(time.Second) {
+		return nil, fmt.Errorf("Can't connect to mqtt broker")
+	}
+
+    return mq, nil
 }
 
 func registerGauges(gauges []string, mq mqtt.Client, metrics prometheus.Registerer, logger *zap.Logger) error {
