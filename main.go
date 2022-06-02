@@ -78,7 +78,7 @@ func run(cfg config, logger *zap.Logger) error {
 
 	err := registerGauges(cfg.Scraping.Simple, mq, metrics, logger)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	logger.Info("Starting metrics server")

@@ -9,7 +9,7 @@ RUN go mod download
 
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build \
-go build -o /out/mqtt2prom .
+go build -buildvcs=false -o /out/mqtt2prom .
 
 FROM scratch AS bin-unix
 
