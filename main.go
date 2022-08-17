@@ -70,6 +70,7 @@ func connectMqtt(cfg mqttConfig) (mqtt.Client, error) {
 	mqttOpts.Username = cfg.UserName
 
 	mqttOpts.AddBroker(cfg.Broker)
+    mqttOpts.AutoReconnect = true
 
 	mq := mqtt.NewClient(mqttOpts)
 
