@@ -50,7 +50,7 @@ func run(cfg config, logger *zap.Logger) error {
 
 	http.Handle("/metrics", promhttp.HandlerFor(metrics, promhttp.HandlerOpts{}))
 
-	addr := fmt.Sprintf("127.0.0.1:%s", cfg.Http.Port)
+	addr := fmt.Sprintf("0.0.0.0:%s", cfg.Http.Port)
 
 	logger.Info("Starting metrics server", zap.String("address", addr))
 
